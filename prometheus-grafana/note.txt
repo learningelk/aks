@@ -1,0 +1,147 @@
+
+Step 1: Add Helm Repositories
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+
+Step 2: Install Prometheus
+helm install prometheus prometheus-community/prometheus \
+  --namespace monitoring --create-namespace
+kubectl get pods -n monitoring
+
+Step 3: Install Grafana
+helm install grafana grafana/grafana \
+  --namespace monitoring
+kubectl get pods -n monitoring
+
+Retrieve the Grafana admin password:
+
+kubectl get secret -n monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+
+helm install kube-state-metrics prometheus-community/kube-state-metrics \
+  --namespace monitoring
+
+
+-----------------------------------------------------------------------------------------------------------
+
+fluent-bit and grafana loki
+
+configmap
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluent-bit-config
+  namespace: logging
+data:
+  fluent-bit.conf: |
+    [SERVICE]
+        Flush         1
+        Daemon        Off
+        Log_Level     info
+
+    [INPUT]
+        Name          tail
+        Path          /var/log/containers/*.log
+        Parser        docker
+
+    [PARSER]
+        Name          docker
+        Format        json
+        Time_Key      time
+        Time_Format   %Y-%m-%dT%H:%M:%S.%L
+
+    [FILTER]
+        Name          kubernetes
+        Match         *
+        Kube_Tag_Prefix  kube.var.log.containers.
+        Kube_URL         https://kubernetes.default.svc:443
+
+
+    [OUTPUT]
+        Name            loki
+        Match           *
+        Host            loki
+        Port            3100
+
+  parsers.conf: |
+    [PARSER]
+        Name   docker
+        Format json
+
+
+Daemonset
+----
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: fluent-bit
+  namespace: logging
+spec:
+  selector:
+    matchLabels:
+      k8s-app: fluent-bit
+  template:
+    metadata:
+      labels:
+        k8s-app: fluent-bit
+    spec:
+      serviceAccountName: fluent-bit
+      containers:
+        - name: fluent-bit
+          image: fluent/fluent-bit:latest
+          volumeMounts:
+            - name: varlog
+              mountPath: /var/log
+            - name: varlibdockercontainers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: config-volume
+              mountPath: /fluent-bit/etc/
+      volumes:
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: varlibdockercontainers
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: config-volume
+          configMap:
+            name: fluent-bit-config
+
+
+Grafana loki
+--------------
+
+helm repo add grafana https://grafana.github.io/helm-charts
+helm install loki grafana/loki-stack --namespace logging --create-namespace
+
+
+Add Loki as a data source in Grafana:
+-------------------------------------
+Go to Configuration > Data Sources.
+Select Loki and provide the Loki service URL (e.g., http://loki:3100).
+
+
+logging-app
+----
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logging-app
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logging-app
+  template:
+    metadata:
+      labels:
+        app: logging-app
+    spec:
+      containers:
+        - name: logging-app
+          image: chentex/random-logger:latest
+          ports:
+            - containerPort: 8080
