@@ -145,3 +145,14 @@ spec:
           image: chentex/random-logger:latest
           ports:
             - containerPort: 8080
+
+
+            helm repo add elastic https://helm.elastic.co
+
+helm install elasticsearch \
+ --set replicas=1 \
+ --set persistence.labels.enabled=true elastic/elasticsearch -n logging
+
+ nSOuiDYtRj1Fy3us
+
+ helm install kibana --set service.type=LoadBalancer elastic/kibana -n logging
