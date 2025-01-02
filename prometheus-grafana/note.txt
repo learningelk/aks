@@ -122,7 +122,7 @@ Add Loki as a data source in Grafana:
 Go to Configuration > Data Sources.
 Select Loki and provide the Loki service URL (e.g., http://loki:3100).
 
-
+----------------------------------------------------------------------------------
 logging-app
 ----
 apiVersion: apps/v1
@@ -149,6 +149,9 @@ spec:
 
             helm repo add elastic https://helm.elastic.co
 
+----------------------------------------------------------------------------------
+self managed elastic search and kibana          
+----------------------------------------------------------------------------------
 helm install elasticsearch \
  --set replicas=1 \
  --set persistence.labels.enabled=true elastic/elasticsearch -n logging
@@ -156,3 +159,4 @@ helm install elasticsearch \
  nSOuiDYtRj1Fy3us
 
  helm install kibana --set service.type=LoadBalancer elastic/kibana -n logging
+ ----------------------------------------------------------------------------------
